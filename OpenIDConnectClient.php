@@ -279,7 +279,7 @@ class OpenIDConnectClient
 
 
     /**
-     * @param $url Sets redirect URL for auth flow
+     * @param $url string Sets redirect URL for auth flow
      */
     public function setRedirectURL ($url) {
         if (filter_var($url, FILTER_VALIDATE_URL) !== false) {
@@ -803,5 +803,10 @@ class OpenIDConnectClient
         return $this->refreshToken;
     }
 
+    public function setAccessToken($accessToken)
+    {
+        $this->accessToken = $accessToken;
 
+        return $this;
+    }
 }

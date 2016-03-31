@@ -1,5 +1,7 @@
 <?php
 
+use Symfony\Component\HttpFoundation\Session\SessionInterface;
+
 /**
  *
  * Copyright MITRE 2015
@@ -20,13 +22,6 @@
  * under the License.
  *
  */
-
-/**
- * Use session to manage a nonce
- */
-if (!isset($_SESSION)) {
-    session_start();
-}
 
 /**
  *
@@ -60,7 +55,7 @@ function b64url2b64($base64url) {
     // "Shouldn't" be necessary, but why not
     $padding = strlen($base64url) % 4;
     if ($padding > 0) {
-	$base64url .= str_repeat("=", 4 - $padding);
+        $base64url .= str_repeat("=", 4 - $padding);
     }
     return strtr($base64url, '-_', '+/');
 }
@@ -84,11 +79,6 @@ if (!function_exists('json_decode')) {
     throw new OpenIDConnectClientException('OpenIDConnect needs the JSON PHP extension.');
 }
 
-/**
- *
- * Please note this class stores nonces in $_SESSION['openid_connect_nonce']
- *
- */
 class OpenIDConnectClient
 {
 
@@ -148,16 +138,22 @@ class OpenIDConnectClient
     private $authParams = array();
 
     /**
+     * @var SessionInterface
+     */
+    private $session;
+
+    /**
      * @param $provider_url string optional
      *
      * @param $client_id string optional
      * @param $client_secret string optional
      *
      */
-    public function __construct($provider_url = null, $client_id = null, $client_secret = null) {
+    public function __construct($provider_url = null, $client_id = null, $client_secret = null, SessionInterface $session) {
         $this->setProviderURL($provider_url);
         $this->clientID = $client_id;
         $this->clientSecret = $client_secret;
+        $this->session = $session;
     }
 
     /**
@@ -190,30 +186,30 @@ class OpenIDConnectClient
             }
 
             // Do an OpenID Connect session check
-            if ($_REQUEST['state'] != $_SESSION['openid_connect_state']) {
+            if ($_REQUEST['state'] != $this->session->get('openid_connect_state')) {
                 throw new OpenIDConnectClientException("Unable to determine state");
             }
 
-	    if (!property_exists($token_json, 'id_token')) {
-		throw new OpenIDConnectClientException("User did not authorize openid scope.");
-	    }
+            if (!property_exists($token_json, 'id_token')) {
+                throw new OpenIDConnectClientException("User did not authorize openid scope.");
+            }
 
             $claims = $this->decodeJWT($token_json->id_token, 1);
 
-	    // Verify the signature
-	    if ($this->canVerifySignatures()) {
-		if (!$this->verifyJWTsignature($token_json->id_token)) {
-		    throw new OpenIDConnectClientException ("Unable to verify signature");
-		}
-	    } else {
-		user_error("Warning: JWT signature verification unavailable.");
-	    }
+            // Verify the signature
+            if ($this->canVerifySignatures()) {
+                if (!$this->verifyJWTsignature($token_json->id_token)) {
+                    throw new OpenIDConnectClientException ("Unable to verify signature");
+                }
+            } else {
+                user_error("Warning: JWT signature verification unavailable.");
+            }
 
             // If this is a valid claim
             if ($this->verifyJWTclaims($claims)) {
 
                 // Clean up the session a little
-                unset($_SESSION['openid_connect_nonce']);
+                $this->session->remove('openid_connect_nonce');
 
                 // Save the access token
                 $this->accessToken = $token_json->access_token;
@@ -339,11 +335,11 @@ class OpenIDConnectClient
         // Generate and store a nonce in the session
         // The nonce is an arbitrary value
         $nonce = $this->generateRandString();
-        $_SESSION['openid_connect_nonce'] = $nonce;
+        $this->session->set('openid_connect_nonce', $nonce);
 
         // State essentially acts as a session key for OIDC
         $state = $this->generateRandString();
-        $_SESSION['openid_connect_state'] = $state;
+        $this->session->set('openid_connect_state', $state);
 
         $auth_params = array_merge($this->authParams, array(
             'response_type' => $response_type,
@@ -422,23 +418,23 @@ class OpenIDConnectClient
     }
 
     /**
-      * @param array $keys
-      * @param array $header
-      * @throws OpenIDConnectClientException
-      * @return object
-      */
-     private function get_key_for_header($keys, $header) {
-         foreach ($keys as $key) {
-           if ((!(isset($key->alg) && isset($header->kid)) && $key->kty == 'RSA') || ($key->alg == $header->alg && $key->kid == $header->kid)) {
-                 return $key;
-             }
-         }
-         if (isset($header->kid)) {
-             throw new OpenIDConnectClientException('Unable to find a key for (algorithm, kid):' . $header->alg . ', ' . $header->kid . ')');
-         } else {
-             throw new OpenIDConnectClientException('Unable to find a key for RSA');
-         }
-     }
+     * @param array $keys
+     * @param array $header
+     * @throws OpenIDConnectClientException
+     * @return object
+     */
+    private function get_key_for_header($keys, $header) {
+        foreach ($keys as $key) {
+            if ((!(isset($key->alg) && isset($header->kid)) && $key->kty == 'RSA') || ($key->alg == $header->alg && $key->kid == $header->kid)) {
+                return $key;
+            }
+        }
+        if (isset($header->kid)) {
+            throw new OpenIDConnectClientException('Unable to find a key for (algorithm, kid):' . $header->alg . ', ' . $header->kid . ')');
+        } else {
+            throw new OpenIDConnectClientException('Unable to find a key for RSA');
+        }
+    }
 
 
 
@@ -485,16 +481,16 @@ class OpenIDConnectClient
         }
         $verified = false;
         switch ($header->alg) {
-        case 'RS256':
-        case 'RS384':
-        case 'RS512':
-            $hashtype = 'sha' . substr($header->alg, 2);
-            $verified = $this->verifyRSAJWTsignature($hashtype,
-                                                     $this->get_key_for_header($jwks->keys, $header),
-                                                     $payload, $signature);
-            break;
-        default:
-            throw new OpenIDConnectClientException('No support for signature type: ' . $header->alg);
+            case 'RS256':
+            case 'RS384':
+            case 'RS512':
+                $hashtype = 'sha' . substr($header->alg, 2);
+                $verified = $this->verifyRSAJWTsignature($hashtype,
+                    $this->get_key_for_header($jwks->keys, $header),
+                    $payload, $signature);
+                break;
+            default:
+                throw new OpenIDConnectClientException('No support for signature type: ' . $header->alg);
         }
         return $verified;
     }
@@ -507,7 +503,7 @@ class OpenIDConnectClient
 
         return (($claims->iss == $this->getProviderURL())
             && (($claims->aud == $this->clientID) || (in_array($this->clientID, $claims->aud)))
-            && ($claims->nonce == $_SESSION['openid_connect_nonce']));
+            && ($claims->nonce == $this->session->get('openid_connect_nonce')));
 
     }
 
@@ -611,7 +607,7 @@ class OpenIDConnectClient
 
         // If we set some heaers include them
         if(count($headers) > 0) {
-          curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
         }
 
         // Set URL to download
@@ -786,7 +782,7 @@ class OpenIDConnectClient
      * @return bool
      */
     public function canVerifySignatures() {
-      return class_exists('Crypt_RSA');
+        return class_exists('Crypt_RSA');
     }
 
     /**

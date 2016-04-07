@@ -717,14 +717,11 @@ class OpenIDConnectClient
      *
      * @throws OpenIDConnectClientException
      */
-    public function register() {
+    public function register($metadata = []) {
 
         $registration_endpoint = $this->getProviderConfigValue('registration_endpoint');
 
-        $send_object = (object)array(
-            'redirect_uris' => array($this->getRedirectURL()),
-            'client_name' => $this->getClientName()
-        );
+        $send_object = (object) $this->parseMetadata($metadata);
 
         $response = $this->fetchURL($registration_endpoint, json_encode($send_object));
 
@@ -804,5 +801,35 @@ class OpenIDConnectClient
         $this->accessToken = $accessToken;
 
         return $this;
+    }
+
+    /**
+     * http://openid.net/specs/openid-connect-registration-1_0.html#ClientMetadata
+     *
+     * @param array $metadata
+     * @return array
+     */
+    protected function parseMetadata($metadata = [])
+    {
+        $default = [
+            'redirect_uris' => [$this->getRedirectURL()],
+            'client_name' => $this->getClientName(),
+            'response_types' => ['code'],
+            'grant_types' => ['authorization_code'],
+            'application_type' => 'web',
+            'contacts' => [],
+            'logo_uri' => '',
+            'client_uri' => '',
+            'policy_uri' => '',
+            'tos_uri' => '',
+            'jwks_uri' => '',
+            'jwks' => '',
+            'sector_identifier_uri' => '',
+            'subject_type' => 'pairwise',
+            'initiate_login_uri' => '',
+            'request_uris' => '',
+        ];
+
+        return array_filter(array_merge($default, $metadata));
     }
 }

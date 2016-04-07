@@ -21,11 +21,32 @@
  *
  */
 
-require "../../autoload.php";
+require "vendor/autoload.php";
 
-$oidc = new OpenIDConnectClient('http://myproviderURL.com/',
-                                'ClientIDHere',
-                                'ClientSecretHere');
+use Symfony\Component\HttpFoundation\Session\Session;
+use Symfony\Component\HttpFoundation\Session\Storage\NativeSessionStorage;
+
+$clientId = 'ID';
+$clientSecret = 'SECRET';
+
+$session = new Session(new NativeSessionStorage());
+$oidc = new OpenIDConnectClient(
+    'https://your.provider',
+    $clientId, $clientSecret,
+    $session
+);
+$oidc->setClientName('OIDC Demo');
+$oidc->setRedirectURL('http://localhost:8080/');
+
+if ($clientId === null) {
+    $oidc->register(
+        [
+            'logo_uri' => "https://placehold.it/300/ffa500/000000?text=LOGO",
+        ]
+    );
+    var_dump($oidc);
+    die();
+}
 
 $oidc->authenticate();
 $name = $oidc->requestUserInfo('given_name');
@@ -43,9 +64,9 @@ $name = $oidc->requestUserInfo('given_name');
 </head>
 <body>
 
-    <div>
-        Hello <?php echo $name; ?>
-    </div>
+<div>
+    Hello <?php echo $name; ?>
+</div>
 
 </body>
 </html>

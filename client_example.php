@@ -26,12 +26,14 @@ require "vendor/autoload.php";
 use Symfony\Component\HttpFoundation\Session\Session;
 use Symfony\Component\HttpFoundation\Session\Storage\NativeSessionStorage;
 
-$clientId = 'ID';
-$clientSecret = 'SECRET';
+// PROVIDER="https://provider.url" php -d variables_order=EGPCS -S 127.0.0.1:8080
+$providerUrl = $_ENV['PROVIDER'];
+$clientId = @$_ENV['CLIENT_ID'];
+$clientSecret = @$_ENV['CLIENT_SECRET'];
 
 $session = new Session(new NativeSessionStorage());
 $oidc = new OpenIDConnectClient(
-    'https://your.provider',
+    $providerUrl,
     $clientId, $clientSecret,
     $session
 );
